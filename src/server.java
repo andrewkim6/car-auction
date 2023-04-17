@@ -52,7 +52,7 @@ public class server implements AuctionServerInterface {
 
         AuctionServerInterface server = new server();
        // server.loadItemsFromFile("cars.txt");
-
+//
         ServerSocket serverSocket = new ServerSocket(8003);
         System.out.println("Server started on port 8001");
 
