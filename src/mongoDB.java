@@ -10,9 +10,13 @@ import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Updates;
+<<<<<<< HEAD
 
 import client.client;
 public class mongoDB extends client{
+=======
+public class mongoDB {
+>>>>>>> 0a3e8cf (server files)
     private static MongoClient mongo;
     private static MongoDatabase database;
     private static MongoCollection<Document> collection;
