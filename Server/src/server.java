@@ -2,6 +2,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -44,6 +45,7 @@ public class server implements AuctionServerInterface {
     private final static String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
     private static final String DB = "auction";
     private static final String COLLECTION = "items";
+    private static final String COLLECTION2 = "users";
     public static void main(String[] args) throws IOException {
         mongo = MongoClients.create(URI);
         database = mongo.getDatabase(DB);
@@ -51,38 +53,49 @@ public class server implements AuctionServerInterface {
         ping();
 
         AuctionServerInterface server = new server();
-       // server.loadItemsFromFile("cars.txt");
-
-        ServerSocket serverSocket = new ServerSocket(8003);
-        System.out.println("Server started on port 8001");
+        server.loadItemsFromFile("cars.txt");
 
         
-        Socket clientSocket = serverSocket.accept();
-        System.out.println("Accepted connection from " + clientSocket.getInetAddress());
-        mongo.close();
+
+
+       // mongo.close();
         while (true) {
-            try (Socket socket = serverSocket.accept()) {
-                System.out.println("Client connected: " + socket.getInetAddress().getHostName());
+            try  {
+                ServerSocket ss = new ServerSocket(8003);
+                Socket s = ss.accept();
+                InputStream is =s.getInputStream();
 
-                // Input and output streams for the socket
-                BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintWriter output = new PrintWriter(socket.getOutputStream(), true);
+                ObjectInputStream ois = new ObjectInputStream(is);
+                Object receivedObject = ois.readObject();
 
-                String line;
-                while ((line = input.readLine()) != null) {
-                    System.out.println("Received from client: " + line);
-
-                    // Send response back to client
-                    output.println("Server received: " + line);
-                }
-
-                System.out.println("Client disconnected.");
-            } catch (IOException e) {
-                System.out.println("Error handling client: " + e.getMessage());
+                if (receivedObject instanceof Bid) {
+                    Bid bid = (Bid) receivedObject;
+                    MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
+                    MongoCollection<Document> items = database.getCollection(COLLECTION);
+                    Document query = new Document("Model", bid.getModel());
+                    Document result = items.find(query).first();
+                    Document update = new Document("$set", new Document("Max", bid.getAmount()));
+                    items.updateOne(result, update);
+                    // Handle the bid object
+                } else if (receivedObject instanceof User) {
+                    User user = (User) receivedObject;
+                    String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
+                    String DB = "auction";
+                    String COLLECTION2 = "users";
+                    MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
+                    MongoCollection<Document> users = database.getCollection(COLLECTION2);
+                    Document doc = new Document("Username", user.getUser())
+                    .append("Password", user.getPass());   
+                    users.insertOne(doc);
+                    // Handle the user object
+                }  
+            } catch (Exception e) {
+                System.out.println(e);
             }
-    
+        }
+
         }        
-    }
+   // }
 
     public static void ping() {
         try {
@@ -93,7 +106,7 @@ public class server implements AuctionServerInterface {
         System.err.println("An error occurred while attempting to run a command: " + me);
         }
     }
-    
+
     public void loadItemsFromFile(String filename) {
         try (Scanner scanner = new Scanner(new File(filename))) {
             // Create MongoClient instance
@@ -103,18 +116,19 @@ public class server implements AuctionServerInterface {
                 String[] info = line.split(" ");
                 Document doc = new Document("Brand", info[0])
                 .append("Model", info[1])
-                .append("Type", info[2]);
+                .append("Type", info[2])
+                .append("Max", 0.0);
                 collections.insertOne(doc);
             }
-    
+
         } catch (FileNotFoundException e) {
             System.err.println("File not found: " + filename);
         }
     }
-    
-    
-    
-    
+
+
+
+
 
     private static class ClientHandler implements Runnable {
         private final Socket clientSocket;

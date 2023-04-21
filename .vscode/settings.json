@@ -1,0 +1,14 @@
+{
+    "java.project.referencedLibraries": {
+        "include": [
+            "lib/**/*.jar",
+            "c:\\Users\\akim6\\Downloads\\slf4j-api-2.0.6.jar",
+            "c:\\Users\\akim6\\Downloads\\mongodb-driver-sync-4.8.2.jar",
+            "c:\\Users\\akim6\\Downloads\\mongodb-driver-core-4.8.2.jar",
+            "c:\\Users\\akim6\\Downloads\\bson-4.8.2.jar"
+        ],
+        "exclude": [
+            "c:\\Users\\akim6\\Downloads\\gson-2.9.0.jar"
+        ]
+    }
+}
