@@ -6,13 +6,23 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.lang.reflect.Method;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Observable;
 import java.util.Scanner;
+import java.util.Set;
+
 import com.mongodb.MongoClientSettings;
 import com.mongodb.ServerAddress;
 import com.mongodb.client.MongoClients;
@@ -25,6 +35,7 @@ import org.bson.BsonInt64;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import com.mongodb.MongoException;
+import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
@@ -50,51 +61,129 @@ public class server implements AuctionServerInterface {
         mongo = MongoClients.create(URI);
         database = mongo.getDatabase(DB);
         collection = database.getCollection(COLLECTION);
-        ping();
-
-        AuctionServerInterface server = new server();
-        server.loadItemsFromFile("cars.txt");
-
         
 
+        
+        AuctionServerInterface server = new server();
+        server.loadItemsFromFile("cars.txt");
+        List<Socket> connectedClients = new ArrayList<>();
+        List<ObjectOutputStream> clientOutputStreams = new ArrayList<>();
+        
+        ServerSocket ss = new ServerSocket(8003);
+        
 
+        Set<Bid> sentItemIds = new HashSet<>();
        // mongo.close();
-        while (true) {
-            try  {
-                ServerSocket ss = new ServerSocket(8003);
-                Socket s = ss.accept();
-                InputStream is =s.getInputStream();
-
-                ObjectInputStream ois = new ObjectInputStream(is);
-                Object receivedObject = ois.readObject();
-
-                if (receivedObject instanceof Bid) {
-                    Bid bid = (Bid) receivedObject;
-                    MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
-                    MongoCollection<Document> items = database.getCollection(COLLECTION);
-                    Document query = new Document("Model", bid.getModel());
-                    Document result = items.find(query).first();
-                    Document update = new Document("$set", new Document("Max", bid.getAmount()));
-                    items.updateOne(result, update);
-                    // Handle the bid object
-                } else if (receivedObject instanceof User) {
-                    User user = (User) receivedObject;
-                    String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
-                    String DB = "auction";
-                    String COLLECTION2 = "users";
-                    MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
-                    MongoCollection<Document> users = database.getCollection(COLLECTION2);
-                    Document doc = new Document("Username", user.getUser())
-                    .append("Password", user.getPass());   
-                    users.insertOne(doc);
-                    // Handle the user object
-                }  
-            } catch (Exception e) {
-                System.out.println(e);
+       Thread thread = new Thread(new Runnable(){
+            
+        @Override
+        public void run(){
+            while (true) {
+                // Query the collection for all items
+                try{
+                Bid bid = null;
+                FindIterable<Document> docs = collection.find();
+                for (Document item : docs) {
+                    LocalDateTime expirationTime = null;
+                    Date date = item.getDate("Time");
+                    if (date != null) {
+                        expirationTime = LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
+                    }
+                    
+                    if (expirationTime != null && !expirationTime.isAfter(LocalDateTime.now()) && item.getBoolean("Status")) {
+                        bid = new Bid(item.getDouble("Max"), item.getString("Bidder"), item.getString("Model"), item.getString("Brand"), item.getString("Type"), true);
+                        Document update = new Document("$set", new Document("Status", false));
+                        collection.updateOne(item, update);
+                        for (ObjectOutputStream clientStream : clientOutputStreams) {
+                                clientStream.reset();
+                                clientStream.writeObject(bid);
+                                clientStream.flush();
+                        }
+                    
+                    }
+                    
+                        
+                
+                    
+                
+                }
+            }catch(Exception e5){
+                e5.printStackTrace();
             }
         }
+        }
+    });
+    thread.start();
+        while (true) {
+            try{
+            Socket s = ss.accept();
+            connectedClients.add(s);
+            OutputStream os = s.getOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(os);
+            InputStream is =s.getInputStream();
+            ObjectInputStream ois = new ObjectInputStream(is);
+            clientOutputStreams.add(oos);
+            
+            Thread t = new Thread(new Runnable(){
+                @Override
+                public void run() {
+                    while(true){
+                        Object receivedObject = null;
+                        try  {
+                
+                            receivedObject = ois.readObject();
+                            if (receivedObject instanceof Bid) {
+                                Bid bid = (Bid) receivedObject;
+                                MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
+                                MongoCollection<Document> items = database.getCollection(COLLECTION);
+                                Document query = new Document("Model", bid.getModel());
+                                Document result = items.find(query).first();
+                                if(bid.getAmount() >= result.getDouble("Price")){
+                                    Document sold = new Document("$set", new Document("Status", false).append("Max", bid.getAmount()).append("Bidder", bid.getBidder()));
+                                    items.updateOne(result, sold);
+                                }
+                                else{
+                                    Document update = new Document("$set", new Document("Max", bid.getAmount()).append("Bidder", bid.getBidder()));
+                                    items.updateOne(result, update);
+                                }
+                                for (ObjectOutputStream clientStream : clientOutputStreams) {
+                                    clientStream.reset();
+                                    clientStream.writeObject(bid);
+                                    clientStream.flush();
+                                }
+                            } else if (receivedObject instanceof User) {
+                                User user = (User) receivedObject;
+                                String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
+                                String DB = "auction";
+                                String COLLECTION2 = "users";
+                                MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
+                                MongoCollection<Document> users = database.getCollection(COLLECTION2);
+                                Document doc = new Document("Username", user.getUser())
+                                .append("Password", user.getPass());   
+                                users.insertOne(doc);
+                                // Handle the user object
+                            }  
+                        }
+                        catch (Exception e) {
+                            System.out.println("A client has disconnected.");
+                            int index = connectedClients.indexOf(e);
+                            if (index != -1) {
+                                connectedClients.remove(index);
+                                clientOutputStreams.remove(index);
+                            }
+                            return;
+                        }
+                            
+                        }
+                    }
+            });
+            t.start();
+        } catch (SocketException e){
+        }
+        }
+        }
 
-        }        
+                
    // }
 
     public static void ping() {
@@ -113,12 +202,15 @@ public class server implements AuctionServerInterface {
             MongoCollection<Document> collections = database.getCollection(COLLECTION);
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
-                String[] info = line.split(" ");
+                String[] info = line.split("  ");               
                 Document doc = new Document("Brand", info[0])
                 .append("Model", info[1])
                 .append("Type", info[2])
-                .append("Max", 0.0);
+                .append("Max", 0.0).append("Price", Double.parseDouble(info[3])).append("Status", true)
+                .append("Time", Date.from(LocalDateTime.now().plusSeconds(Integer.parseInt(info[4])).atZone(ZoneId.systemDefault()).toInstant())).append("Bidder", "")
+                .append("Min", Double.parseDouble(info[5])).append("Info", info[6]);
                 collections.insertOne(doc);
+                
             }
 
         } catch (FileNotFoundException e) {
