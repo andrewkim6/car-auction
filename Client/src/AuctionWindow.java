@@ -41,9 +41,11 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.media.AudioClip;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.stage.Stage;
@@ -131,11 +133,14 @@ public class AuctionWindow extends Stage {
     private int m5Time;
     private Label label = new Label();
     private Timeline timeline;
+    private boolean itemUpdating;
+    private Thread itemThread;
+    private TextArea itemHistory = new TextArea();
+    private Thread startMusic;
     MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
     MongoCollection<Document> items = database.getCollection(COLLECTION);
     MongoCursor<Document> cursor = items.find().iterator();
     MongoCollection<Document> histories = database.getCollection("history");
-    Document queryHistory = histories.find().first();
     public void startChecking(){
         isChecking = true;
         checkingThread = new Thread(() -> {
@@ -173,7 +178,8 @@ public class AuctionWindow extends Stage {
         });
         checkingThread.start();
     }
-
+    Object updateLock = new Object();
+    Object listenLock = new Object();
     public void setTime(){
         for(Document doc : items.find()){
             if(doc.getString("Model").equals("911")){
@@ -218,25 +224,79 @@ public class AuctionWindow extends Stage {
             }
         }
     }
-    public void startUpdating(){
+    public void reset(){
+        imageView.setImage(null);
+        brand.setText("Brand:");
+        type.setText("Type:");
+        MSRP.setText("MSRP:");
+        minimum.setText("Minimum Bid:");
+        label.setText("Timer:");
+        currentBid.setText("Current Bid:");
+        description.setText("Description:");
+    }
+    
+    public void itemUpdating(){
+        itemUpdating = true;
+        itemThread = new Thread(() ->{
+            try{
+                while(itemUpdating){
+                    if(itemComboBox.getValue()!= null){
+                        Document query = new Document("Model", itemComboBox.getValue()).append("Status", true);
+                        Document result = items.find(query).first();
+                        List<String> itemhis = new ArrayList<>((List<String>) result.get("History"));
+                        //itemHistory.setText("");
+                        Platform.runLater(() -> {
+                            itemHistory.clear();
+                            for(String line : itemhis){    
+                                itemHistory.appendText(line);
+                            }
+                        });
+                          Thread.sleep(5000);
+                        }
+                }
+            }catch (Exception e7){
+                e7.printStackTrace();
+            }
+        }); itemThread.start();
+    }
+    int value = 0;
+    public synchronized void startUpdating(){
         isUpdating = true;
         updatingThread = new Thread(() -> {
             try{
-                while(isUpdating){
-                    Platform.runLater(() -> {
+                while(isUpdating) {  
+                    value= 0;  
+                    if(histories.find().first() != null) {
+                    Document queryHistory = histories.find().first();
                     List<String> all = (List<String>) queryHistory.get("History");
-                    textArea.clear();
-                    for(String line : all){
-                        textArea.appendText(line);
-                    }
-                    
+                   // System.out.println(all.size());
+                    Platform.runLater(() -> {
+                        textArea.clear();
+                        for(String line : all){    
+                            textArea.appendText(line);
+                        }
                     });
-                    Thread.sleep(1);
+                    if(itemComboBox.getValue()!= null){
+                        Document query = new Document("Model", itemComboBox.getValue());
+                        Document result = items.find(query).first();
+                        List<String> itemhis = new ArrayList<>((List<String>) result.get("History"));
+                        //itemHistory.setText("");
+                        Platform.runLater(() -> {
+                            itemHistory.clear();
+                            for(String line : itemhis){    
+                                itemHistory.appendText(line);
+                            }
+                        });
+                    }
                 }
+                    value = 1;
+                    Thread.sleep(3000);
+            }
             }catch(Exception e8 ){
                 e8.printStackTrace();
             }
-        }); updatingThread.start();
+        }); 
+        updatingThread.start();
     }
 
     public void startListening() {
@@ -245,63 +305,64 @@ public class AuctionWindow extends Stage {
             try {
                 while (isListening && socket.isConnected() && !socket.isClosed()) {
                         // read from the socket
+                        
                         Object receivedObject = ois.readObject();
+                        while(value == 0){
+
+                        }
                         if (receivedObject instanceof Bid) {
                             // Handle the bid object
+                            Document result;
+                            Document query;
+                            Document queryHistory;
                             Bid bid = (Bid) receivedObject;
-                            Document query = new Document("Model", bid.getModel());
-                            Document result = items.find(query).first();
+                            synchronized(this){
+                             query = new Document("Model", bid.getModel());
+                             result = items.find(query).first();
+                             queryHistory = histories.find().first(); 
+                            }
+                                
                             if(bid.getHighbidder() == false){
                                 if(result.getBoolean("Status")){
-                                    List<String> allHistory = (List<String>) queryHistory.get("History");
-                                    allHistory.add(bid.getBidder()+" has bid: $" + bid.getAmount() + " on " + bid.getBrand() + " " +bid.getModel()+"\n");
-                                    Document updateHistory = new Document("$set", new Document("History", allHistory));
+                                    String entry = (bid.getBidder()+" has bid: $" + bid.getAmount() + " on " + bid.getBrand() + " " +bid.getModel()+"\n");
+                                    Document updateHistory = new Document("$push", new Document("History", entry));
                                     histories.updateOne(queryHistory, updateHistory);
-
-                                    List<String> history =  (List<String>) result.get("History");
-                                    history.add(bid.getBidder()+" has bid: $" + bid.getAmount() + " on " + bid.getBrand() + " " +bid.getModel()+"\n");
-                                    Document update = new Document("$set", new Document("History", history));
+                                    System.out.println(queryHistory.getList("History",String.class).size());
+            
+                                    Document update = new Document("$push", new Document("History", entry));
                                     items.updateOne(result, update);
+                                    System.out.println(result.getList("History", String.class).size());
                                 }
                                 else{
-                                    List<String> allHistory = (List<String>) queryHistory.get("History");
-                                    allHistory.add(bid.getBidder()+" has purchased "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() +"\n");
-                                    Document updateHistory = new Document("$set",new Document("History", allHistory));
+                                    String entry = (bid.getBidder()+" has purchased "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() +"\n");
+                                    Document updateHistory = new Document("$push",new Document("History", entry));
                                     histories.updateOne(queryHistory, updateHistory);
 
-                                    List<String> history =  (List<String>) result.get("History");
-                                    history.add(bid.getBidder()+" has purchased "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() +"\n");
-                                    Document update = new Document("$set", new Document("History", history));
+                                    Document update = new Document("$push", new Document("History", entry));
                                     items.updateOne(result, update);
                                 }
                             }
                             else{
                                 if(!bid.getBidder().equals("")){
-                                    List<String> allHistory = (List<String>) queryHistory.get("History");
-                                    allHistory.add(bid.getBidder()+" has won "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() + " by time" +"\n");
-                                    Document updateHistory = new Document("$set", new Document("History", allHistory));
+                                    String entry = (bid.getBidder()+" has won "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() + " by time" +"\n");
+                                    Document updateHistory = new Document("$push", new Document("History", entry));
                                     histories.updateOne(queryHistory, updateHistory);
 
-                                    List<String> history =  (List<String>) result.get("History");
-                                    history.add(bid.getBidder()+" has won "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() + " by time" +"\n");
-                                    Document update = new Document("$set", new Document("History", history));
+                                    Document update = new Document("$push", new Document("History", entry));
                                     items.updateOne(result, update);
                                 }
                                 else{
-                                    List<String> allHistory = (List<String>) queryHistory.get("History");
-                                    allHistory.add("Time for " + bid.getBrand() + " " + bid.getModel() + " has been expired" + "\n");
-                                    Document updateHistory = new Document("$set" , new Document("History", allHistory));
-                                    histories.updateOne(queryHistory, updateHistory);           
+                                    String entry = ("Time for " + bid.getBrand() + " " + bid.getModel() + " has been expired" + "\n");
+                                    Document updateHistory = new Document("$push" , new Document("History", entry));
+                                    histories.updateOne(queryHistory, updateHistory); 
                                     
-                                    List<String> history =  (List<String>) result.get("History");
-                                    history.add("Time for " + bid.getBrand() + " " + bid.getModel() + " has been expired" + "\n");
-                                    Document update = new Document("$set", new Document("History", history));
+                                    Document update = new Document("$push", new Document("History", entry));
                                     items.updateOne(result, update);
                                 }
                             }
-                        } else if (receivedObject instanceof String) {
-                            // Handle other objects, if necessary
                         }
+                        
+                    
                 
                 }
             } catch (IOException | ClassNotFoundException e) {
@@ -310,20 +371,27 @@ public class AuctionWindow extends Stage {
         });
         listenerThread.start();
     }
+    public void music(){
+        startMusic = new Thread(() -> {
+            Media media = new Media(new File("src/tokyodrift.mp3").toURI().toString());
+        // Create a MediaPlayer object to play the music
+        AudioClip mediaPlayer = new AudioClip(media.getSource());
+        // Start playing the music
+        mediaPlayer.setVolume(.2);
+        mediaPlayer.play();
+
+        }); startMusic.start();
+    }
 
     public AuctionWindow(String user , Socket socket, OutputStream os, ObjectOutputStream oos, ObjectInputStream ois) {
         this.socket = socket;
         this.os = os;
         this.oos = oos;
         this.ois = ois;
-        Media media = new Media(new File("src/tokyodrift.mp3").toURI().toString());
+        
         setTime();
-        // Create a MediaPlayer object to play the music
-        MediaPlayer mediaPlayer = new MediaPlayer(media);
-
-        // Start playing the music
-        mediaPlayer.setVolume(.2);
-        mediaPlayer.setAutoPlay(true);
+        music();
+        
         
         timeline = new Timeline(new KeyFrame(Duration.seconds(1), new EventHandler<ActionEvent>() {
             @Override
@@ -391,6 +459,7 @@ public class AuctionWindow extends Stage {
         startListening();
         startChecking();
         startUpdating();
+        //itemUpdating();
 
 
         exit.setText("Logout");
@@ -414,11 +483,31 @@ public class AuctionWindow extends Stage {
         HBox bidLine = new HBox();
         bidLine.setSpacing(10);
         bidLine.setAlignment(Pos.CENTER_LEFT);
+        bidTextField.setStyle("-fx-background-color: #f5e6cd; -fx-text-fill: #000000;");
         bidLine.getChildren().addAll(bidAmount, bidTextField);
+
+        BorderPane borderPane = new BorderPane();
+        Label itemHistoryLabel = new Label("Item History");
+        itemHistory.setStyle("-fx-background-color: #f5e6cd; -fx-text-fill: #000000;");
+        borderPane.setCenter(itemHistory);
+        borderPane.setTop(itemHistoryLabel);
+
+        BorderPane historyPane = new BorderPane();
+        Label totalHistoryLabel = new Label("All History");
+        textArea.setStyle("-fx-background-color: #f5e6cd; -fx-text-fill: #000000;");
+        historyPane.setCenter(textArea);
+        historyPane.setTop(totalHistoryLabel);
+
+
+        HBox imageLine = new HBox();
+        imageLine.setSpacing(10);
+        imageLine.setAlignment(Pos.CENTER_LEFT);
+        imageLine.getChildren().addAll(imageView, borderPane);
 
         // Create GUI components and add them to layout
         VBox layout = new VBox(10);
-        layout.getChildren().addAll(hbox, description, imageView, highestBidLabel, bidLine, bidBox, textArea, exit);
+        layout.getChildren().addAll(hbox, description, imageLine, highestBidLabel, bidLine, bidBox, historyPane, exit);
+        layout.setStyle("-fx-background-color: #d9d1c4;");
 
         // Set layout and size of window
         setScene(new Scene(layout));
@@ -435,7 +524,6 @@ public class AuctionWindow extends Stage {
         double rowHeight = 10; // replace with actual row height
         double comboBoxHeight = itemComboBox.getVisibleRowCount() * rowHeight;
         itemComboBox.setPrefHeight(comboBoxHeight);
-
         itemComboBox.setOnAction(e-> {
             // create a query document to find the document by name field
             Document query = new Document("Model", itemComboBox.getValue()).append("Status", true);
@@ -473,11 +561,13 @@ public class AuctionWindow extends Stage {
                     }                
                     // TODO: You can add more code here to update other UI elements based on the selected item
                 }
+            }else{
+                reset();
             }
 
 
         });
-
+        bidButton.setStyle("-fx-background-color: #3f3e43; -fx-text-fill: #ffffff;");
         bidButton.setOnAction(e->{
             try{
                 Document query = new Document("Model", itemComboBox.getValue());
@@ -498,15 +588,8 @@ public class AuctionWindow extends Stage {
                             e1.printStackTrace();
                         }
                         if(bidValue > result.getDouble("Price")){
-                            imageView.setImage(null);
                             error.setText("Item sold!");
-                            brand.setText(result.getString("Brand:"));
-                            type.setText(result.getString("Type:"));
-                            MSRP.setText("MSRP:");
-                            minimum.setText("Minimum Bid:");
-                            label.setText("Timer:");
-                            currentBid.setText("Current Bid:");
-                            description.setText("Description:");
+                            reset();
                         }
                         else{
                             error.setText("Bid succesfully made");
@@ -524,6 +607,7 @@ public class AuctionWindow extends Stage {
             }
         });
 
+        exit.setStyle("-fx-background-color: #3f3e43; -fx-text-fill: #ffffff;");
         exit.setOnAction(e->{
             try {
                 oos.flush(); // flush the output stream before closing

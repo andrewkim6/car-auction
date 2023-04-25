@@ -1,2 +1,5 @@
-Porsche  911  Coupe  90000.0  70  50000.0  A small sports car with a 3.0 V6
-Ford  Mustang  Coupe  45000.0  90  30000.0  A mid size muscle car with a 5.0 V8
+Porsche  911  Coupe  90000.0  180  50000.0  A small sports car with a 3.0 V6
+Ford  Mustang  Coupe  45000.0  120  30000.0  A mid size muscle car with a 5.0 V8
+Mercedes  S500  Sedan  100000.0  60  50000.0  A large luxury sedan with a 4.7 V8
+BMW  M5  Sedan  110000.0  200  40000.0  A large sport sedan with a 4.4 V8
+Tesla  Model 3  Sedan  40000.0  150  10000.0  A mid size EV 

@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -30,10 +31,15 @@ import com.mongodb.connection.ClusterSettings;
 import com.mongodb.connection.ConnectionPoolSettings;
 import com.mongodb.connection.SocketSettings;
 import com.mongodb.connection.SslSettings;
+
+import org.apache.commons.codec.digest.DigestUtils;
 import org.bson.BsonDocument;
 import org.bson.BsonInt64;
 import org.bson.Document;
 import org.bson.conversions.Bson;
+import org.jasypt.encryption.pbe.StandardPBEStringEncryptor;
+import org.mindrot.jbcrypt.BCrypt;
+
 import com.mongodb.MongoException;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoClient;
@@ -108,7 +114,7 @@ public class server implements AuctionServerInterface {
                 
                 }
             }catch(Exception e5){
-                e5.printStackTrace();
+                //e5.printStackTrace();
             }
         }
         }
@@ -163,13 +169,18 @@ public class server implements AuctionServerInterface {
                                 String COLLECTION2 = "users";
                                 MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
                                 MongoCollection<Document> users = database.getCollection(COLLECTION2);
+                                StandardPBEStringEncryptor encryptor = new StandardPBEStringEncryptor();
+                                encryptor.setPassword(user.getPass());
+                                String encrypted = encryptor.encrypt(user.getPass());
+                                String salt = BCrypt.gensalt();
+                                String hashedPassword = BCrypt.hashpw(user.getPass(), salt);
                                 Document doc = new Document("Username", user.getUser())
-                                .append("Password", user.getPass());   
+                                .append("Encrypted", encrypted).append("Hashed", hashedPassword).append("Salt", salt);   
                                 users.insertOne(doc);
                                 // Handle the user object
                             }  
                         }
-                        catch (Exception e) {
+                        catch (EOFException e) {
                             System.out.println("A client has disconnected.");
                             int index = connectedClients.indexOf(e);
                             if (index != -1) {
@@ -177,6 +188,8 @@ public class server implements AuctionServerInterface {
                                 clientOutputStreams.remove(index);
                             }
                             return;
+                        } catch (Exception e1){
+                          //  e1.printStackTrace();
                         }
                             
                         }
@@ -184,6 +197,7 @@ public class server implements AuctionServerInterface {
             });
             t.start();
         } catch (SocketException e){
+           // e.printStackTrace();
         }
         }
         }
@@ -200,7 +214,7 @@ public class server implements AuctionServerInterface {
         System.err.println("An error occurred while attempting to run a command: " + me);
         }
     }
-
+    
     public void loadItemsFromFile(String filename) {
         try (Scanner scanner = new Scanner(new File(filename))) {
             // Create MongoClient instance
@@ -227,46 +241,4 @@ public class server implements AuctionServerInterface {
         }
     }
 
-
-
-
-
-    private static class ClientHandler implements Runnable {
-        private final Socket clientSocket;
-
-        public ClientHandler(Socket socket) {
-            this.clientSocket = socket;
-        }
-
-        public void run() {
-            try {
-                ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream());
-                ObjectOutputStream out = new ObjectOutputStream(clientSocket.getOutputStream());
-
-                AuctionServerInterface server = new server();
-                while (true) {
-                    // Read method name and arguments from input stream
-                    String methodName = (String) in.readObject();
-                    Object[] args = (Object[]) in.readObject();
-
-                    // Invoke method on server
-                    Method method = server.getClass().getMethod(methodName, getArgumentTypes(args));
-                    Object result = method.invoke(server, args);
-
-                    // Send result back to client
-                    out.writeObject(result);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        private Class<?>[] getArgumentTypes(Object[] args) {
-            Class<?>[] types = new Class<?>[args.length];
-            for (int i = 0; i < args.length; i++) {
-                types[i] = args[i].getClass();
-            }
-            return types;
-        }
-    }
-    }
+}

@@ -1,3 +1,4 @@
+import java.awt.Color;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,6 +21,7 @@ import javax.swing.JTextField;
 import javax.swing.ScrollPaneConstants;
 
 import org.bson.Document;
+import org.mindrot.jbcrypt.BCrypt;
 
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoClients;
@@ -48,6 +50,7 @@ public class client extends Application{
          String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
         String DB = "auction";
         String COLLECTION = "users";
+        
         MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
         MongoCollection<Document> users = database.getCollection(COLLECTION);
         
@@ -64,7 +67,8 @@ public class client extends Application{
 
         
         try {
-            socket = new Socket("localhost", 8003);
+            //socket = new Socket("localhost", 8003);
+            socket = new Socket("18.190.159.200", 8003);
             os = socket.getOutputStream(); //clientsocket's output stream
             oos = new ObjectOutputStream(os);
             is = socket.getInputStream();
@@ -93,6 +97,16 @@ public class client extends Application{
         TextField guestUserField = new TextField();
         Label guestError = new Label();
         Button guestLoginButton = new Button("Login");
+
+        userField.setStyle("-fx-background-color: #f5e6cd; -fx-text-fill: #000000;");
+        passField.setStyle("-fx-background-color: #f5e6cd; -fx-text-fill: #000000;");
+        newUser.setStyle("-fx-background-color: #f5e6cd; -fx-text-fill: #000000;");
+        newPass.setStyle("-fx-background-color: #f5e6cd; -fx-text-fill: #000000;");
+        guestUserField.setStyle("-fx-background-color: #f5e6cd; -fx-text-fill: #000000;");
+        loginButton.setStyle("-fx-background-color: #3f3e43; -fx-text-fill: #ffffff;");
+        createButton.setStyle("-fx-background-color: #3f3e43; -fx-text-fill: #ffffff;");
+        guestLoginButton.setStyle("-fx-background-color: #3f3e43; -fx-text-fill: #ffffff;");
+        
         // create layout for login form
 
         HBox guestLine = new HBox();
@@ -125,19 +139,50 @@ public class client extends Application{
         createLine.setAlignment(Pos.CENTER_LEFT);
         createLine.getChildren().addAll(createButton, createError);
 
-        
+        Button exit = new Button("Exit");
+
+        exit.setStyle("-fx-background-color: #3f3e43; -fx-text-fill: #ffffff;");
 
         VBox loginLayout = new VBox(10);
         loginLayout.getChildren().addAll(userLabel, userField, passLabel, passField, loginLine, create, user, pass, createLine, 
-        guestTitle, guestLine, guestLoginLine);
+        guestTitle, guestLine, guestLoginLine, exit);
         loginLayout.setStyle("-fx-padding: 10px");
-
+        
+        loginLayout.setStyle("-fx-background-color: #d9d1c4;");
         // create scene for login window
         Scene loginScene = new Scene(loginLayout, 500, 500);
 
         // show login window
         primaryStage.setScene(loginScene);
         primaryStage.show();
+
+        primaryStage.setOnCloseRequest(event ->{
+            try {
+                oos.flush();
+                oos.close();
+                os.close();
+                socket.close();
+            } catch (IOException e1) {
+                // TODO Auto-generated catch block
+                e1.printStackTrace();
+            } // flush the output stream before closing
+            System.exit(0);
+        });
+
+
+        exit.setOnAction(e->{
+                try {
+                    oos.flush();
+                    oos.close();
+                    os.close();
+                    socket.close();
+                } catch (IOException e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                } // flush the output stream before closing
+                System.exit(0);
+
+        });
 
         createButton.setOnAction(e->{
             if(!newUser.getText().equals("") && !newUser.getText().equals("")){
@@ -158,7 +203,7 @@ public class client extends Application{
                 createError.setText("Error: field(s) left blank!");
             }
         });
-        
+
         guestLoginButton.setOnAction(e->{
             String guest = guestUserField.getText();
             System.out.println(guest);
@@ -196,17 +241,20 @@ public class client extends Application{
     } 
     
 
+
     public static Document validUser(String user, String pass) {
         String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
         String DB = "auction";
         String COLLECTION = "users";
         MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
         MongoCollection<Document> users = database.getCollection(COLLECTION);
-        FindIterable<Document> documents = users.find();
-        for (Document doc : documents) {
-            String username = doc.getString("Username");
-            String password = doc.getString("Password");
-            if(user.equals(username) && pass.equals(password)){
+        Document query = new Document("Username", user);
+        Document doc = users.find(query).first();
+        if (doc != null) {
+            String hashedPassword = doc.getString("Hashed");
+            String salt = doc.getString("Salt");
+            String hashedInputPassword = BCrypt.hashpw(pass, salt);
+            if (hashedInputPassword.equals(hashedPassword)) {
                 return doc;
             }
         }
