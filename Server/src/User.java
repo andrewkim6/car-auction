@@ -1,11 +1,12 @@
 
+
 import java.io.Serializable;
 
 public class User implements Serializable{
     private String username;
-    private int password;
+    private String password;
 
-public User(String user, int pass){
+public User(String user, String pass){
     this.username = user;
     this.password = pass;
 }
@@ -13,7 +14,7 @@ public User(String user, int pass){
 public String getUser(){
     return username;
 }
-public int getPass(){
+public String getPass(){
     return password;
 }
 }

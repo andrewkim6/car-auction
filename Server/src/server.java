@@ -65,7 +65,7 @@ public class server implements AuctionServerInterface {
 
         
         AuctionServerInterface server = new server();
-        server.loadItemsFromFile("cars.txt");
+        //server.loadItemsFromFile("cars.txt");
         List<Socket> connectedClients = new ArrayList<>();
         List<ObjectOutputStream> clientOutputStreams = new ArrayList<>();
         

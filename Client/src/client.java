@@ -142,20 +142,21 @@ public class client extends Application{
         primaryStage.show();
 
         createButton.setOnAction(e->{
-            try{
-            String newUsername = newUser.getText();
-            int newPassword = Integer.parseInt(newPass.getText());
-            User myUser = new User(newUsername, newPassword);
-            try {
-                oos.reset();
-                oos.writeUnshared(myUser); //adds to output stream
-                oos.flush();
-            } catch (IOException e1) {
-                // TODO Auto-generated catch block
-                e1.printStackTrace();
+            if(!newUser.getText().equals("") && !newUser.getText().equals("")){
+                String newUsername = newUser.getText();
+                String newPassword = newPass.getText();
+                User myUser = new User(newUsername, newPassword);
+                try {
+                    oos.reset();
+                    oos.writeUnshared(myUser); //adds to output stream
+                    oos.flush();
+                } catch (IOException e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                }
+                createError.setText("User successfully created!");
             }
-            createError.setText("User successfully created!");
-            } catch(NumberFormatException e3){
+            else{
                 createError.setText("Error: field(s) left blank!");
             }
         });
@@ -175,8 +176,8 @@ public class client extends Application{
         });
         loginButton.setOnAction(e-> {
             try{
-            if(userField.getText() != null || passField.getText() != null){
-                Document doc = validUser(userField.getText(), Integer.parseInt(passField.getText()));
+            if(!userField.getText().equals("") && !passField.getText().equals("")){
+                Document doc = validUser(userField.getText(), passField.getText());
                 if(doc!=null){ //if the user exists and the password is correct
                     error.setText("connecting...");
                     AuctionWindow auctionWindow = new AuctionWindow(userField.getText(), socket, os, oos, ois);
@@ -187,14 +188,17 @@ public class client extends Application{
                     error.setText("Error: Incorrect password or username!");
                 }
             }
+            else{
+                error.setText("Error: Field(s) left blank!");
+            }
         } catch(NumberFormatException e2){
-            error.setText("Incorrect Format!");
+            error.setText("Error: Field(s) left blank!");
         }
         });
     } 
     
 
-    public static Document validUser(String user, int pass) {
+    public static Document validUser(String user, String pass) {
         String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
         String DB = "auction";
         String COLLECTION = "users";
@@ -203,8 +207,8 @@ public class client extends Application{
         FindIterable<Document> documents = users.find();
         for (Document doc : documents) {
             String username = doc.getString("Username");
-            int password = doc.getInteger("Password");
-            if(user.equals(username) && pass == password){
+            String password = doc.getString("Password");
+            if(user.equals(username) && pass.equals(password)){
                 return doc;
             }
         }
