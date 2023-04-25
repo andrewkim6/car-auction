@@ -120,8 +120,10 @@ public class AuctionWindow extends Stage {
     private ObjectInputStream serverInput;
     private boolean isListening = false;
     private boolean isChecking = true;
+    private boolean isUpdating = true;
     private Thread checkingThread;
     private Thread listenerThread;
+    private Thread updatingThread;
     private int gtrsTime;
     private int mustangTime;
     private int model3Time;
@@ -132,7 +134,8 @@ public class AuctionWindow extends Stage {
     MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
     MongoCollection<Document> items = database.getCollection(COLLECTION);
     MongoCursor<Document> cursor = items.find().iterator();
-
+    MongoCollection<Document> histories = database.getCollection("history");
+    Document queryHistory = histories.find().first();
     public void startChecking(){
         isChecking = true;
         checkingThread = new Thread(() -> {
@@ -215,6 +218,26 @@ public class AuctionWindow extends Stage {
             }
         }
     }
+    public void startUpdating(){
+        isUpdating = true;
+        updatingThread = new Thread(() -> {
+            try{
+                while(isUpdating){
+                    Platform.runLater(() -> {
+                    List<String> all = (List<String>) queryHistory.get("History");
+                    textArea.clear();
+                    for(String line : all){
+                        textArea.appendText(line);
+                    }
+                    
+                    });
+                    Thread.sleep(1);
+                }
+            }catch(Exception e8 ){
+                e8.printStackTrace();
+            }
+        }); updatingThread.start();
+    }
 
     public void startListening() {
         isListening = true;
@@ -226,23 +249,54 @@ public class AuctionWindow extends Stage {
                         if (receivedObject instanceof Bid) {
                             // Handle the bid object
                             Bid bid = (Bid) receivedObject;
+                            Document query = new Document("Model", bid.getModel());
+                            Document result = items.find(query).first();
                             if(bid.getHighbidder() == false){
-                                Document query = new Document("Model", bid.getModel());
-                                Document result = items.find(query).first();
                                 if(result.getBoolean("Status")){
-                                    textArea.appendText(bid.getBidder()+" has bid: $" + bid.getAmount() + " on " + bid.getBrand() + " " +bid.getModel()+"\n");
+                                    List<String> allHistory = (List<String>) queryHistory.get("History");
+                                    allHistory.add(bid.getBidder()+" has bid: $" + bid.getAmount() + " on " + bid.getBrand() + " " +bid.getModel()+"\n");
+                                    Document updateHistory = new Document("$set", new Document("History", allHistory));
+                                    histories.updateOne(queryHistory, updateHistory);
+
+                                    List<String> history =  (List<String>) result.get("History");
+                                    history.add(bid.getBidder()+" has bid: $" + bid.getAmount() + " on " + bid.getBrand() + " " +bid.getModel()+"\n");
+                                    Document update = new Document("$set", new Document("History", history));
+                                    items.updateOne(result, update);
                                 }
                                 else{
-                                    textArea.appendText(bid.getBidder()+" has purchased "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() +"\n");
+                                    List<String> allHistory = (List<String>) queryHistory.get("History");
+                                    allHistory.add(bid.getBidder()+" has purchased "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() +"\n");
+                                    Document updateHistory = new Document("$set",new Document("History", allHistory));
+                                    histories.updateOne(queryHistory, updateHistory);
+
+                                    List<String> history =  (List<String>) result.get("History");
+                                    history.add(bid.getBidder()+" has purchased "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() +"\n");
+                                    Document update = new Document("$set", new Document("History", history));
+                                    items.updateOne(result, update);
                                 }
                             }
                             else{
                                 if(!bid.getBidder().equals("")){
-                                    textArea.appendText(bid.getBidder()+" has won "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() + " by time" +"\n");
+                                    List<String> allHistory = (List<String>) queryHistory.get("History");
+                                    allHistory.add(bid.getBidder()+" has won "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() + " by time" +"\n");
+                                    Document updateHistory = new Document("$set", new Document("History", allHistory));
+                                    histories.updateOne(queryHistory, updateHistory);
+
+                                    List<String> history =  (List<String>) result.get("History");
+                                    history.add(bid.getBidder()+" has won "+ bid.getBrand() + " " + bid.getModel() + " for $" + bid.getAmount() + " by time" +"\n");
+                                    Document update = new Document("$set", new Document("History", history));
+                                    items.updateOne(result, update);
                                 }
                                 else{
-                                    textArea.appendText("Time for " + bid.getBrand() + " " + bid.getModel() + " has been expired" + "\n");
+                                    List<String> allHistory = (List<String>) queryHistory.get("History");
+                                    allHistory.add("Time for " + bid.getBrand() + " " + bid.getModel() + " has been expired" + "\n");
+                                    Document updateHistory = new Document("$set" , new Document("History", allHistory));
+                                    histories.updateOne(queryHistory, updateHistory);           
                                     
+                                    List<String> history =  (List<String>) result.get("History");
+                                    history.add("Time for " + bid.getBrand() + " " + bid.getModel() + " has been expired" + "\n");
+                                    Document update = new Document("$set", new Document("History", history));
+                                    items.updateOne(result, update);
                                 }
                             }
                         } else if (receivedObject instanceof String) {
@@ -336,6 +390,7 @@ public class AuctionWindow extends Stage {
 
         startListening();
         startChecking();
+        startUpdating();
 
 
         exit.setText("Logout");

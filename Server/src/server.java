@@ -65,7 +65,7 @@ public class server implements AuctionServerInterface {
 
         
         AuctionServerInterface server = new server();
-        //server.loadItemsFromFile("cars.txt");
+        server.loadItemsFromFile("cars.txt");
         List<Socket> connectedClients = new ArrayList<>();
         List<ObjectOutputStream> clientOutputStreams = new ArrayList<>();
         
@@ -136,15 +136,20 @@ public class server implements AuctionServerInterface {
                                 Bid bid = (Bid) receivedObject;
                                 MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
                                 MongoCollection<Document> items = database.getCollection(COLLECTION);
+                                MongoCollection<Document> histories = database.getCollection("history");
                                 Document query = new Document("Model", bid.getModel());
                                 Document result = items.find(query).first();
-                                if(bid.getAmount() >= result.getDouble("Price")){
+                                Document queryHistory = histories.find().first();
+                                if(bid.getAmount() >= result.getDouble("Price")){ //if bidder purchases
                                     Document sold = new Document("$set", new Document("Status", false).append("Max", bid.getAmount()).append("Bidder", bid.getBidder()));
                                     items.updateOne(result, sold);
+                                    
+                                    
                                 }
                                 else{
                                     Document update = new Document("$set", new Document("Max", bid.getAmount()).append("Bidder", bid.getBidder()));
                                     items.updateOne(result, update);
+                                    
                                 }
                                 for (ObjectOutputStream clientStream : clientOutputStreams) {
                                     clientStream.reset();
@@ -202,16 +207,20 @@ public class server implements AuctionServerInterface {
             MongoCollection<Document> collections = database.getCollection(COLLECTION);
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
+                List<String> empty = new ArrayList<String>();
                 String[] info = line.split("  ");               
                 Document doc = new Document("Brand", info[0])
                 .append("Model", info[1])
                 .append("Type", info[2])
                 .append("Max", 0.0).append("Price", Double.parseDouble(info[3])).append("Status", true)
                 .append("Time", Date.from(LocalDateTime.now().plusSeconds(Integer.parseInt(info[4])).atZone(ZoneId.systemDefault()).toInstant())).append("Bidder", "")
-                .append("Min", Double.parseDouble(info[5])).append("Info", info[6]);
+                .append("Min", Double.parseDouble(info[5])).append("Info", info[6]).append("History", empty);
                 collections.insertOne(doc);
-                
             }
+            List<String> emptyHistory = new ArrayList<String>();
+            Document history = new Document("History", emptyHistory);
+            MongoCollection<Document> histories = database.getCollection("history");
+            histories.insertOne(history);
 
         } catch (FileNotFoundException e) {
             System.err.println("File not found: " + filename);
