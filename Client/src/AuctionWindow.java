@@ -109,7 +109,7 @@ public class AuctionWindow extends Stage {
     private TextField bidTextField = new TextField();
     private Button bidButton = new Button("Bid");
     private ComboBox<String> itemComboBox = new ComboBox<>();
-    private final static String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
+    private final static String URI = "mongodb+srv://user:pass@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
     private static final String DB = "auction";
     private static final String COLLECTION = "items";
     private Label brand = new Label();

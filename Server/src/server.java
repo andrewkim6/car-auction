@@ -68,7 +68,7 @@ public class server implements AuctionServerInterface {
     private static MongoClient mongo;
     private static MongoDatabase database;
     private static MongoCollection<Document> collection;
-    private final static String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
+    private final static String URI = "mongodb+srv://user:pass@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
     private static final String DB = "auction";
     private static final String COLLECTION = "items";
     private static final String COLLECTION2 = "users";
@@ -173,7 +173,7 @@ public class server implements AuctionServerInterface {
                                 }
                             } else if (receivedObject instanceof User) {
                                 User user = (User) receivedObject;
-                                String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
+                                String URI = "mongodb+srv://user:pass@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
                                 String DB = "auction";
                                 String COLLECTION2 = "users";
                                 MongoDatabase database = MongoClients.create(URI).getDatabase(DB);

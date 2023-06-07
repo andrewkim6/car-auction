@@ -56,7 +56,7 @@ public class client extends Application{
         //connect();
 
         launch(args);
-         String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
+         String URI = "mongodb+srv://user:pass@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
         String DB = "auction";
         String COLLECTION = "users";
         
@@ -252,7 +252,7 @@ public class client extends Application{
 
 
     public static Document validUser(String user, String pass) {
-        String URI = "mongodb+srv://akim678910:2812368663a@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
+        String URI = "mongodb+srv://user:pass@cluster0.iku4q9b.mongodb.net/?retryWrites=true&w=majority";
         String DB = "auction";
         String COLLECTION = "users";
         MongoDatabase database = MongoClients.create(URI).getDatabase(DB);
